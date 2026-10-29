@@ -40,7 +40,7 @@ jobs:
           
           ssh-keyscan -p "$SSH_PORT" -H "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
 
-      - name: Deploy Code to cPanel (Streaming Tar)
+      - name: Package & Transfer to cPanel
         env:
           SSH_HOST_RAW: ${{ secrets.CPANEL_SSH_HOST }}
           SSH_USER_RAW: ${{ secrets.CPANEL_SSH_USER }}
@@ -53,13 +53,23 @@ jobs:
           SSH_PORT=${SSH_PORT:-22}
           DEST_PATH=$(echo -n "$DEST_PATH_RAW" | tr -d '\r\n ')
 
-          tar -czf - \
+          # 1. Package backend archive locally
+          tar -czf /tmp/backend-deploy.tar.gz \
             --exclude='.git' \
             --exclude='.github' \
             --exclude='.gitignore' \
             --exclude='node_modules' \
             --exclude='.env' \
-            . | ssh -p "$SSH_PORT" -o StrictHostKeyChecking=no -o PubkeyAcceptedKeyTypes=+ssh-rsa -o HostKeyAlgorithms=+ssh-rsa "${SSH_USER}@${SSH_HOST}" "mkdir -p ${DEST_PATH} && tar -xzf - -C ${DEST_PATH}"
+            .
+
+          # 2. Ensure remote directory exists
+          ssh -p "$SSH_PORT" -o StrictHostKeyChecking=no -o PubkeyAcceptedKeyTypes=+ssh-rsa -o HostKeyAlgorithms=+ssh-rsa "${SSH_USER}@${SSH_HOST}" "mkdir -p ${DEST_PATH}"
+
+          # 3. Securely upload archive
+          scp -P "$SSH_PORT" -o StrictHostKeyChecking=no -o PubkeyAcceptedKeyTypes=+ssh-rsa -o HostKeyAlgorithms=+ssh-rsa /tmp/backend-deploy.tar.gz "${SSH_USER}@${SSH_HOST}:${DEST_PATH}/backend-deploy.tar.gz"
+
+          # 4. Extract archive on server
+          ssh -p "$SSH_PORT" -o StrictHostKeyChecking=no -o PubkeyAcceptedKeyTypes=+ssh-rsa -o HostKeyAlgorithms=+ssh-rsa "${SSH_USER}@${SSH_HOST}" "cd ${DEST_PATH} && tar -xzf backend-deploy.tar.gz && rm -f backend-deploy.tar.gz"
 
       - name: Install Dependencies & Restart Node App on cPanel
         env:
