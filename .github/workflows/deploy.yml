@@ -25,27 +25,58 @@ jobs:
           node --check server.js
 
       - name: Configure SSH Key
+        env:
+          SSH_KEY: ${{ secrets.CPANEL_SSH_KEY }}
+          SSH_PORT_RAW: ${{ secrets.CPANEL_SSH_PORT }}
+          SSH_HOST_RAW: ${{ secrets.CPANEL_SSH_HOST }}
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.CPANEL_SSH_KEY }}" > ~/.ssh/id_rsa
+          printf '%s\n' "$SSH_KEY" | tr -d '\r' > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -p ${{ secrets.CPANEL_SSH_PORT || 22 }} -H ${{ secrets.CPANEL_SSH_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
+          
+          SSH_HOST=$(echo -n "$SSH_HOST_RAW" | tr -d '\r\n ')
+          SSH_PORT=$(echo -n "$SSH_PORT_RAW" | tr -d '\r\n ')
+          SSH_PORT=${SSH_PORT:-22}
+          
+          ssh-keyscan -p "$SSH_PORT" -H "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
 
       - name: Sync Files to cPanel
+        env:
+          SSH_HOST_RAW: ${{ secrets.CPANEL_SSH_HOST }}
+          SSH_USER_RAW: ${{ secrets.CPANEL_SSH_USER }}
+          SSH_PORT_RAW: ${{ secrets.CPANEL_SSH_PORT }}
+          DEST_PATH_RAW: ${{ secrets.CPANEL_BACKEND_PATH }}
         run: |
+          SSH_HOST=$(echo -n "$SSH_HOST_RAW" | tr -d '\r\n ')
+          SSH_USER=$(echo -n "$SSH_USER_RAW" | tr -d '\r\n ')
+          SSH_PORT=$(echo -n "$SSH_PORT_RAW" | tr -d '\r\n ')
+          SSH_PORT=${SSH_PORT:-22}
+          DEST_PATH=$(echo -n "$DEST_PATH_RAW" | tr -d '\r\n ')
+
           rsync -avz \
-            -e "ssh -p ${{ secrets.CPANEL_SSH_PORT || 22 }} -o StrictHostKeyChecking=no" \
+            -e "ssh -p $SSH_PORT -o StrictHostKeyChecking=no" \
             --exclude='.git' \
             --exclude='.github' \
             --exclude='.gitignore' \
             --exclude='node_modules' \
             --exclude='.env' \
-            ./ ${{ secrets.CPANEL_SSH_USER }}@${{ secrets.CPANEL_SSH_HOST }}:${{ secrets.CPANEL_BACKEND_PATH }}/
+            ./ "${SSH_USER}@${SSH_HOST}:${DEST_PATH}/"
 
       - name: Install Dependencies & Restart Node App on cPanel
+        env:
+          SSH_HOST_RAW: ${{ secrets.CPANEL_SSH_HOST }}
+          SSH_USER_RAW: ${{ secrets.CPANEL_SSH_USER }}
+          SSH_PORT_RAW: ${{ secrets.CPANEL_SSH_PORT }}
+          DEST_PATH_RAW: ${{ secrets.CPANEL_BACKEND_PATH }}
         run: |
-          ssh -p ${{ secrets.CPANEL_SSH_PORT || 22 }} -o StrictHostKeyChecking=no ${{ secrets.CPANEL_SSH_USER }}@${{ secrets.CPANEL_SSH_HOST }} "
-            cd ${{ secrets.CPANEL_BACKEND_PATH }}
+          SSH_HOST=$(echo -n "$SSH_HOST_RAW" | tr -d '\r\n ')
+          SSH_USER=$(echo -n "$SSH_USER_RAW" | tr -d '\r\n ')
+          SSH_PORT=$(echo -n "$SSH_PORT_RAW" | tr -d '\r\n ')
+          SSH_PORT=${SSH_PORT:-22}
+          DEST_PATH=$(echo -n "$DEST_PATH_RAW" | tr -d '\r\n ')
+
+          ssh -p "$SSH_PORT" -o StrictHostKeyChecking=no "${SSH_USER}@${SSH_HOST}" "
+            cd ${DEST_PATH}
             npm install --omit=dev --no-audit --prefer-offline || npm install --omit=dev
             mkdir -p tmp
             touch tmp/restart.txt
