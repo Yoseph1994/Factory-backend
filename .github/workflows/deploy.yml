@@ -54,7 +54,7 @@ jobs:
           DEST_PATH=$(echo -n "$DEST_PATH_RAW" | tr -d '\r\n ')
 
           rsync -avz \
-            -e "ssh -p $SSH_PORT -o StrictHostKeyChecking=no" \
+            -e "ssh -p $SSH_PORT -o StrictHostKeyChecking=no -o PubkeyAcceptedKeyTypes=+ssh-rsa -o HostKeyAlgorithms=+ssh-rsa" \
             --exclude='.git' \
             --exclude='.github' \
             --exclude='.gitignore' \
@@ -75,7 +75,7 @@ jobs:
           SSH_PORT=${SSH_PORT:-22}
           DEST_PATH=$(echo -n "$DEST_PATH_RAW" | tr -d '\r\n ')
 
-          ssh -p "$SSH_PORT" -o StrictHostKeyChecking=no "${SSH_USER}@${SSH_HOST}" "
+          ssh -p "$SSH_PORT" -o StrictHostKeyChecking=no -o PubkeyAcceptedKeyTypes=+ssh-rsa -o HostKeyAlgorithms=+ssh-rsa "${SSH_USER}@${SSH_HOST}" "
             cd ${DEST_PATH}
             npm install --omit=dev --no-audit --prefer-offline || npm install --omit=dev
             mkdir -p tmp
