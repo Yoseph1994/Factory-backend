@@ -34,22 +34,13 @@ jobs:
           printf '%s\n' "$SSH_KEY" | tr -d '\r' > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
           
-          if grep -q "PuTTY-User-Key-File" ~/.ssh/id_rsa; then
-            echo "Detected PuTTY .ppk format. Converting to standard OpenSSH..."
-            sudo apt-get update -qq && sudo apt-get install -y -qq putty-tools
-            puttygen ~/.ssh/id_rsa -O private-openssh -o ~/.ssh/id_rsa.openssh
-            mv ~/.ssh/id_rsa.openssh ~/.ssh/id_rsa
-            chmod 600 ~/.ssh/id_rsa
-          fi
-
-          ssh-keygen -y -f ~/.ssh/id_rsa >/dev/null 2>&1 && echo "KEY_IS_VALID_OPENSSH=YES" || echo "KEY_IS_VALID_OPENSSH=NO"
-          
           SSH_HOST=$(echo -n "$SSH_HOST_RAW" | tr -d '\r\n ')
           SSH_PORT=$(echo -n "$SSH_PORT_RAW" | tr -d '\r\n ')
           SSH_PORT=${SSH_PORT:-22}
           
           ssh-keyscan -p "$SSH_PORT" -H "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
-      - name: Sync Files to cPanel
+
+      - name: Deploy Code to cPanel (Streaming Tar)
         env:
           SSH_HOST_RAW: ${{ secrets.CPANEL_SSH_HOST }}
           SSH_USER_RAW: ${{ secrets.CPANEL_SSH_USER }}
@@ -62,14 +53,13 @@ jobs:
           SSH_PORT=${SSH_PORT:-22}
           DEST_PATH=$(echo -n "$DEST_PATH_RAW" | tr -d '\r\n ')
 
-          rsync -avz \
-            -e "ssh -p $SSH_PORT -o StrictHostKeyChecking=no -o PubkeyAcceptedKeyTypes=+ssh-rsa -o HostKeyAlgorithms=+ssh-rsa" \
+          tar -czf - \
             --exclude='.git' \
             --exclude='.github' \
             --exclude='.gitignore' \
             --exclude='node_modules' \
             --exclude='.env' \
-            ./ "${SSH_USER}@${SSH_HOST}:${DEST_PATH}/"
+            . | ssh -p "$SSH_PORT" -o StrictHostKeyChecking=no -o PubkeyAcceptedKeyTypes=+ssh-rsa -o HostKeyAlgorithms=+ssh-rsa "${SSH_USER}@${SSH_HOST}" "mkdir -p ${DEST_PATH} && tar -xzf - -C ${DEST_PATH}"
 
       - name: Install Dependencies & Restart Node App on cPanel
         env:
