@@ -11,9 +11,9 @@ const isRemoteOrSsl = connectionString.includes('sslmode=require') ||
 const pool = new Pool({
   connectionString,
   ssl: isRemoteOrSsl ? { rejectUnauthorized: false } : false,
-  max: 20,
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 10000,
+  max: 5, // Lean pool limit for shared/cPanel hosting to conserve processes (NPROC)
+  idleTimeoutMillis: 5000,
+  connectionTimeoutMillis: 5000,
 });
 
 pool.on('error', (err) => {
