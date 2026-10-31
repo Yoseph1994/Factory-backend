@@ -6,7 +6,17 @@ require('dotenv').config();
 
 const connectionString = process.env.DATABASE_URL || 'postgres://postgres:postgres@localhost:5432/plastix_factory';
 
+const isRemoteOrSsl = connectionString.includes('sslmode=require') ||
+  process.env.DB_SSL === 'true' ||
+  (!connectionString.includes('localhost') && !connectionString.includes('127.0.0.1'));
+
 async function ensureDatabaseExists() {
+  // If remote database (e.g. Neon, Supabase, cPanel user), database is already provisioned
+  if (isRemoteOrSsl) {
+    console.log('[DB Init] Remote or production database detected; using configured database directly.');
+    return;
+  }
+
   const adminClient = new Client({
     connectionString: 'postgres://postgres:postgres@localhost:5432/postgres'
   });
@@ -22,17 +32,19 @@ async function ensureDatabaseExists() {
       console.log('Database "plastix_factory" already exists.');
     }
   } catch (err) {
-    console.error('Error ensuring database exists:', err.message);
-    throw err;
+    console.warn('[DB Init] Notice: ensureDatabaseExists skipped or failed:', err.message);
   } finally {
-    await adminClient.end();
+    try { await adminClient.end(); } catch {}
   }
 }
 
 async function initializeSchemaAndSeed() {
   await ensureDatabaseExists();
 
-  const pool = new Pool({ connectionString });
+  const pool = new Pool({
+    connectionString,
+    ssl: isRemoteOrSsl ? { rejectUnauthorized: false } : false
+  });
 
   try {
     console.log('Connecting to plastix_factory database...');

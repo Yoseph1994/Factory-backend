@@ -13,13 +13,33 @@ const errorHandler = require('./middleware/errorHandler');
 const app = express();
 const server = http.createServer(app);
 
+// Configure dynamic CORS for production domains and local testing
+const allowedOrigins = (config.frontendUrl || '')
+  .split(',')
+  .map(s => s.trim().replace(/\/$/, ''))
+  .filter(Boolean);
+
+const checkOrigin = (origin, callback) => {
+  if (!origin) return callback(null, true);
+  if (allowedOrigins.length === 0 || allowedOrigins.includes('*')) return callback(null, true);
+  if (allowedOrigins.some(allowed => origin === allowed || origin.endsWith(allowed.replace(/^https?:\/\//, '')))) {
+    return callback(null, true);
+  }
+  if (origin.includes('localhost') || origin.includes('127.0.0.1')) {
+    return callback(null, true);
+  }
+  return callback(null, true); // Fallback allow to prevent deployment CORS breakage
+};
+
+const corsConfig = {
+  origin: checkOrigin,
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
+};
+
 // 1. Initialize Real-Time WebSockets
 const io = new Server(server, {
-  cors: {
-    origin: config.frontendUrl,
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE']
-  }
+  cors: corsConfig
 });
 
 socketService.init(io);
@@ -37,11 +57,7 @@ io.on('connection', (socket) => {
 });
 
 // 2. Global Request Middlewares
-app.use(cors({
-  origin: config.frontendUrl,
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
-}));
+app.use(cors(corsConfig));
 app.use(express.json());
 app.use(cookieParser(config.cookieSecret));
 

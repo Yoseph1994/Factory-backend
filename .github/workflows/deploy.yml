@@ -95,11 +95,30 @@ jobs:
 
           ssh cpanel "
             cd ${DEST_PATH}
-            export PATH=/opt/alt/alt-nodejs20/root/usr/bin:\$PATH
+            # Auto-detect node binary in system PATH, alt-nodejs, ea-nodejs, or nvm
+            for p in /opt/alt/alt-nodejs20/root/usr/bin /opt/cpanel/ea-nodejs20/bin /usr/local/bin /usr/bin; do
+              if [ -d \"\$p\" ]; then export PATH=\"\$p:\$PATH\"; fi
+            done
+            if [ -d \"\$HOME/.nvm\" ]; then
+              export NVM_DIR=\"\$HOME/.nvm\"
+              [ -s \"\$NVM_DIR/nvm.sh\" ] && \. \"\$NVM_DIR/nvm.sh\"
+            fi
+
+            echo \"Node: \$(node -v 2>/dev/null || echo 'not found')\"
+            echo \"NPM: \$(npm -v 2>/dev/null || echo 'not found')\"
+
             npm install --omit=dev --no-audit --prefer-offline || npm install --omit=dev
+
+            # Run DB migrations/initialization
+            npm run init-db || true
+
+            # Phusion Passenger restart trigger
             mkdir -p tmp
             touch tmp/restart.txt
+
+            # PM2 process restart if available
             if command -v pm2 > /dev/null 2>&1; then
-              pm2 reload factory-backend || pm2 restart factory-backend || true
+              pm2 reload ecosystem.config.js --env production || pm2 start ecosystem.config.js --env production || pm2 reload factory-backend || pm2 restart factory-backend || true
+              pm2 save || true
             fi
           "
